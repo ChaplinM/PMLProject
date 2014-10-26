@@ -1,0 +1,145 @@
+---
+title: "Classification of Exercise Type from Wearable Computing Data"
+output: html_document
+---
+In this project, the goal is to use the measurement data from a wearable 
+computing device to classify the manner in which an exercise activity was 
+performed.   
+The "gbm" model from the "caret" package was used to train a model. 
+Results showed a lower than 4% error rate for both the training (in-sample) and
+cross-validation (out-of-sample) data sets, with a slightly lower in-sample
+error. Hence, the model is highly accurate and there is little danger of 
+overfitting when the model is applied to the test data.
+
+## Loading and Tidying the Data
+
+Required libraries are loaded.
+
+```{r, echo=TRUE, cache=TRUE}
+library(caret)
+```
+
+The data is first loaded, then analyzed to see which features are not useful
+for further analysis. There are several features that can be discarded as they 
+are:
+* admin type fields such as timestamps which uniquely identify observations and 
+hence would cause overfitting
+* columns that consist primarily of NA values (typically only 406 non-NAs in 
+each of these)
+* columns that have near zero variance
+
+```{r, echo=FALSE, cache=TRUE}
+pml_train <- read.csv("pml-training.csv", header=T)
+pml_test <- read.csv("pml-testing.csv", header=T)
+```
+
+Several columns consist primarily of NA values and are unusable.
+
+```{r, cache=TRUE}
+names(pml_train)[colSums(!is.na(pml_train)) < 1000]
+```
+
+There are other columns that have little variance, so are also unusable.
+
+```{r, cache=TRUE}
+nearZeroVar(pml_train)
+```
+
+Finally, there are a number of adminstrative data columns that we will not use. 
+These are columns 1 - 7 ("X" through "num_window").
+
+After tidying the data, the following 53 columns remain:
+* 8 - 11 ("roll_belt" through "total_accel_belt")
+* 37 - 49 ("gyros_belt_x" through "total_accel_arm")
+* 60 - 68 ("gyros_arm_x" through "magnet_arm_z")
+* 84 - 86 ("roll_dumbbell" through "yaw_dumbbell")
+* 102 ("total_accel_dumbbell")
+* 113 - 124 ("gyros_dumbbell_x" through "yaw_forearm")
+* 140 ("total_accel_forearm")
+* 151 - 159 ("gyros_forearm_x" through "magnet_forearm_z")
+* 160 ("classe", the response variable)
+
+```{r, echo=FALSE, cache=TRUE}
+train_plus_cv = pml_train[,c(8:11,37:49,60:68,84:86,102,113:124,140,151:160)]
+```
+
+## Training the Model
+
+The original training data is split 60%-40% into a training and a cross-
+validation data set. The training set will be used to train the model, and its 
+in-sample error rate will be assessed, while the cross-validation set will be 
+used solely to assess the out-of-sample error rate. If the out-of-sample error 
+rate is much higher than the in-sample error rate then this would suggest that 
+the model suffers from overfitting and will not be a good predictor when 
+applied to other data, e.g. the test set.
+
+### Splitting the Data Set
+
+```{r, echo=FALSE, cache=TRUE}
+set.seed(123)
+inTrain = createDataPartition(train_plus_cv$classe, p = 0.6, list = F)
+train = train_plus_cv[ inTrain,]
+cv = train_plus_cv[-inTrain,]
+```
+
+### Fitting a Model to the Training Set
+
+A tree-based boosting model is used as boosting is widely recognised as a good 
+algorithm, since it always focusses on mis-classified cases by increasing their 
+weightings in the individual steps. 
+
+```{r, echo=FALSE, cache=TRUE}
+boostFit = train(classe ~ ., method="gbm", data=train, verbose=F)
+```
+
+The resulting model is shown below.
+
+```{r, echo=TRUE, cache=TRUE}
+print(boostFit)
+```
+
+## Assessing Error Rates
+
+### In-sample error
+
+As remarked previously, the training set is used to estimate the in-sample error.
+
+```{r, echo=TRUE, cache=TRUE}
+predClassTrain = predict(boostFit, train)
+trainErrors = sum(predClassTrain != train$classe)
+trainSize = length(predClassTrain)
+trainErrorRate = trainErrors/trainSize
+trainErrorRate
+```
+
+### Out-of-sample error
+
+The cross-validation set is used to estimate the out-of-sample error.
+
+```{r, echo=TRUE, cache=TRUE}
+predClassCV = predict(boostFit, cv)
+cvErrors = sum(predClassCV != cv$classe)
+cvSize = length(predClassCV)
+cvErrorRate = cvErrors/cvSize
+cvErrorRate
+```
+
+### Comparing the Error Rates
+
+The out-of-sample error (0.037) is not significantly larger than the in-sample 
+error (0.025), so overfitting is not likely. An error comparable to the 
+out-of-sample error is likely to be encountered when the model is used to 
+predict values for the test data set.
+
+## Conclusion
+
+Applying the boosting algorithm over trees ("gbm") to the data set yields an 
+accurate model (>96%) that we can apply to the test set in order to predict the 
+test classifications.
+
+
+
+
+
+
+
